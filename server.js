@@ -5968,6 +5968,8 @@ setInterval(() => {
 }, 5 * 60_000);
 
 // Active health probe -- detect hung browser even when isConnected() lies
+// Disabled for remote mode: remote browser lifecycle is managed externally.
+if (!CONFIG.wsEndpoint) {
 setInterval(async () => {
   if (!browser || healthState.isRecovering) return;
   const timeSinceSuccess = Date.now() - healthState.lastSuccessfulNav;
@@ -5999,6 +6001,7 @@ setInterval(async () => {
     restartBrowser('health probe failed').catch(() => {});
   }
 }, 60_000);
+} // end remote mode skip
 
 // Crash logging
 process.on('uncaughtException', (err) => {
