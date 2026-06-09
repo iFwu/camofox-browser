@@ -561,11 +561,14 @@ let browserIdleTimer = null;
 let browserLaunchPromise = null;
 let browserWarmRetryTimer = null;
 
-if (BROWSER_IDLE_TIMEOUT_MS <= 0) {
+if (CONFIG.wsEndpoint) {
+  log('info', 'remote browser mode: idle shutdown disabled', { endpoint: CONFIG.wsEndpoint });
+} else if (BROWSER_IDLE_TIMEOUT_MS <= 0) {
   log('info', 'browser idle shutdown disabled (BROWSER_IDLE_TIMEOUT_MS=0)');
 }
 
 function scheduleBrowserIdleShutdown() {
+  if (CONFIG.wsEndpoint) return; // remote browser manages its own lifecycle
   if (BROWSER_IDLE_TIMEOUT_MS <= 0) return;
   if (browserIdleTimer || sessions.size > 0 || !browser) return;
   browserIdleTimer = setTimeout(async () => {
@@ -935,6 +938,24 @@ function _countActiveHandles() {
 }
 
 async function launchBrowserInstance() {
+  // --- Remote browser mode: connect to existing Playwright server ---
+  if (CONFIG.wsEndpoint) {
+    log('info', 'connecting to remote browser', { endpoint: CONFIG.wsEndpoint });
+    try {
+      const remoteBrowser = await firefox.connect(CONFIG.wsEndpoint);
+      _lastBrowserPid = null; // remote PID unknown
+      browser = remoteBrowser;
+      _lastBrowserRestartAt = Date.now();
+      attachBrowserCleanup(browser, null);
+      pluginEvents.emit('browser:launched', { browser, display: null });
+      log('info', 'remote browser connected', { endpoint: CONFIG.wsEndpoint });
+      return browser;
+    } catch (err) {
+      log('error', 'failed to connect to remote browser', { endpoint: CONFIG.wsEndpoint, error: err.message });
+      throw err;
+    }
+  }
+
   const hostOS = getHostOS();
   const maxAttempts = proxyPool?.launchRetries ?? 1;
   let lastError = null;
